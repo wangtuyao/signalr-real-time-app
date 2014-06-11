@@ -1,0 +1,144 @@
+﻿@{
+    ViewBag.Title = "Real-Time-Html5-Drawing-App";
+}
+<style>
+    div {
+        margin: 5px;
+    }
+
+    canvas {
+        border: 2px solid #CCC;
+        cursor: default;
+    }
+</style>
+<canvas id="canvas" width="490" height="220"></canvas>
+<br />
+<button id="clear">clear</button>
+<br />
+<div id="color">
+</div>
+
+@section scripts {
+    <script type="text/javascript">
+
+        $(function () {
+            var paint;
+            var context = canvas.getContext("2d");
+            var colors = ["#4e72b8", "#f58220", "#45b97c", "#c77eb5"];
+            var curColor = "#4e72b8";
+            var points = new Array();
+            var colorElement = $("#color");
+            for (var i = 0; i <= colors.length - 1; i++) {
+                colorElement.append(
+                    "<button  style='background-color: " + colors[i] + "'>" + colors[i] + "</button>"
+                );
+            }
+            $("#color :button").click(function () {
+                curColor = $(this).css("background-color");
+            });
+
+            function addClick(x, y, dragging) {
+                var point = new Object();
+                point.clickX = x;
+                point.clickY = y;
+                point.dragging = dragging;
+                point.color = curColor;
+                points.push(point);
+            }
+
+            $('#canvas').mousedown(function (e) {
+                paint = true;
+                addClick(e.pageX - this.offsetLeft, e.pageY - this.offsetTop, false, curColor);
+                redraw();
+            });
+
+            $('#canvas').mousemove(function (e) {
+                if (paint) {
+                    addClick(e.pageX - this.offsetLeft, e.pageY - this.offsetTop, true, curColor);
+                    redraw();
+                }
+            });
+            $('#canvas').mouseup(function (e) {
+                paint = false;
+            });
+            $('#canvas').mouseleave(function (e) {
+                paint = false;
+            });
+
+
+            function clearPoints() {
+                context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+                points = new Array();
+
+            }
+            function redraw() {
+                context.clearRect(0, 0, context.canvas.width, context.canvas.height); // Clears the canvas
+                context.lineJoin = "round";
+                context.lineWidth = 5;
+                for (var i = 0; i < points.length; i++) {
+                    var item = points[i];
+                    var preItem = points[i - 1];
+                    context.beginPath();
+                    if (points[i].dragging) {
+                        context.moveTo(preItem.clickX, preItem.clickY);
+                    } else {
+                        context.moveTo(item.clickX - 1, item.clickY);
+                    }
+                    context.strokeStyle = item.color;
+                    context.lineTo(item.clickX, item.clickY);
+                    context.closePath();
+                    context.stroke();
+                }
+            }
+
+
+            var hub = $.connection.drwingPadHub;
+            var connected = false;
+            $("#clear").click(function () {
+                clearPoints();
+                if (connected) {
+                    hub.server.clear();
+                }
+            });
+            $('#canvas').mousedown(function (e) {
+                if (connected) {
+                    hub.server.broadcastPoint(e.pageX - this.offsetLeft,
+                        e.pageY - this.offsetTop,
+                        false,
+                        curColor);
+                }
+            });
+            $('#canvas').mousemove(function (e) {
+                if (connected && paint) {
+                    hub.server.broadcastPoint(e.pageX - this.offsetLeft,
+                        e.pageY - this.offsetTop,
+                        true,
+                        curColor);
+                }
+            });
+            hub.client.initialization = function (data) {
+                points = new Array();
+                for (var i = 0; i < data.length; i++) {
+                    var item = data[i];
+                    curColor = item.Color;
+                    addClick(item.ClickX, item.ClickY, item.ClickDrag);
+                }
+                redraw();
+            }
+            hub.client.drawPoint = function (data) {
+                curColor = data.Color;
+                addClick(data.ClickX, data.ClickY, data.ClickDrag);
+                redraw();
+            }
+            hub.client.clear = function () {
+                clearPoints();
+            }
+
+            $.connection.hub.start()
+                .done(function () {
+                    connected = true;
+                });
+        });
+    </script>
+}
+
